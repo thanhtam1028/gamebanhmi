@@ -1,0 +1,19 @@
+{
+  "name": "gamebanhmi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bánh Mì Thần Tốc: game platformer hài hước chạy trên Cloudflare Workers, bảng xếp hạng lưu ở D1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.6.0",
+    "@playwright/test": "^1.65.0",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.158.0"
+  }
+}

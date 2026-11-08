@@ -4,14 +4,57 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bánh Mì Thần Tốc</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A5%96%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; height: 100%; background: #1b1b2f; overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; }
   canvas { display: block; width: min(100vw, calc(100vh * 960 / 520)); height: auto; }
+
+  /* Bảng xếp hạng: chỉ hiện khi kết thúc ván và server trả lời được */
+  [hidden] { display: none !important; }
+  #lb { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10, 10, 30, 0.8);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; }
+  #lb .card { width: min(92vw, 380px); max-height: 92vh; overflow: auto; box-sizing: border-box; padding: 20px;
+              background: #25264a; border: 2px solid #ffd740; border-radius: 12px; }
+  #lb h2 { margin: 0 0 4px; font-size: 24px; color: #ffd740; text-align: center; }
+  #lb .sub { margin: 0 0 12px; text-align: center; color: #cfd2ff; }
+  #lb ol { margin: 0 0 14px; padding: 0; list-style: none; counter-reset: rank; }
+  #lb li { counter-increment: rank; display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; }
+  #lb li::before { content: counter(rank) "."; width: 24px; color: #9fa3d9; }
+  #lb li .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #lb li.mine { background: #3b3c70; color: #69f0ae; font-weight: bold; }
+  #lb .empty { text-align: center; color: #9fa3d9; margin-bottom: 14px; }
+  #lb form { display: flex; gap: 8px; margin-bottom: 8px; }
+  #lb input { flex: 1; min-width: 0; padding: 9px 10px; font-size: 16px; border-radius: 6px; border: 1px solid #5a5c9c;
+              background: #151631; color: #fff; }
+  #lb button { padding: 9px 14px; font-size: 16px; border-radius: 6px; border: 0; cursor: pointer;
+               background: #ffd740; color: #1b1b2f; font-weight: bold; }
+  #lb button:disabled { opacity: 0.5; cursor: default; }
+  #lb button.secondary { background: #3b3c70; color: #fff; }
+  #lb .actions { display: flex; gap: 8px; }
+  #lb .actions button { flex: 1; }
+  #lb #lb-msg { min-height: 1.3em; margin: 0 0 8px; text-align: center; font-size: 14px; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="lb" role="dialog" aria-modal="true" aria-labelledby="lb-title" hidden>
+  <div class="card">
+    <h2 id="lb-title">Bảng xếp hạng</h2>
+    <p class="sub" id="lb-sub"></p>
+    <ol id="lb-list"></ol>
+    <p class="empty" id="lb-empty" hidden>Chưa có ai trên bảng. Bạn có thể là người đầu tiên!</p>
+    <form id="lb-form" autocomplete="off">
+      <input id="lb-name" name="name" maxlength="12" placeholder="Tên của bạn (tối đa 12 ký tự)" aria-label="Tên của bạn" required>
+      <button id="lb-send" type="submit">Gửi điểm</button>
+    </form>
+    <p id="lb-msg" role="status"></p>
+    <div class="actions">
+      <button id="lb-restart" type="button">Chơi lại</button>
+      <button id="lb-close" type="button" class="secondary">Đóng</button>
+    </div>
+  </div>
+</div>
 <script>
 // =====================================================================
 // ===== TỰ SỬA Ở ĐÂY =====
@@ -676,6 +719,8 @@ const keys = { left: false, right: false, jump: false };
 const KEYMAP = { ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right", Space: "jump", ArrowUp: "jump", KeyW: "jump" };
 
 addEventListener("keydown", (e) => {
+  // Đang gõ tên hoặc bấm nút trong bảng xếp hạng thì không coi là phím điều khiển game
+  if (e.target && /^(INPUT|BUTTON|TEXTAREA)$/.test(e.target.tagName)) return;
   initAudio();
   if (actx && actx.state === "suspended") actx.resume();
   const k = KEYMAP[e.code];
@@ -692,6 +737,111 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
 addEventListener("blur", () => { keys.left = keys.right = keys.jump = false; });
 
+// ---------- Bảng xếp hạng (Cloudflare Worker + D1) ----------
+// Nếu không có server (ví dụ mở file trực tiếp) thì bảng không hiện và game vẫn chơi bình thường.
+const lb = {
+  el: document.getElementById("lb"),
+  title: document.getElementById("lb-title"),
+  sub: document.getElementById("lb-sub"),
+  list: document.getElementById("lb-list"),
+  empty: document.getElementById("lb-empty"),
+  form: document.getElementById("lb-form"),
+  name: document.getElementById("lb-name"),
+  send: document.getElementById("lb-send"),
+  msg: document.getElementById("lb-msg"),
+  offered: false,     // đã mời gửi điểm cho lần kết thúc ván này chưa
+  sent: false,        // đã gửi điểm của ván này chưa
+  mine: null,         // { name, score } vừa gửi, để tô đậm trong bảng
+};
+const LB_ERRORS = {
+  invalid_name: "Tên không hợp lệ (1 đến 12 ký tự, không xuống dòng).",
+  invalid_score: "Điểm không hợp lệ.",
+  body_too_large: "Dữ liệu quá lớn.",
+};
+
+function lbRender(scores) {
+  lb.list.replaceChildren();
+  lb.empty.hidden = scores.length > 0;
+  for (const s of scores) {
+    const li = document.createElement("li");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = s.name;                       // textContent: tên không bao giờ bị hiểu là HTML
+    const pts = document.createElement("span");
+    pts.textContent = String(s.score);
+    li.append(who, pts);
+    if (lb.mine && lb.mine.name === s.name && lb.mine.score === s.score) { li.className = "mine"; lb.mine = null; }
+    lb.list.append(li);
+  }
+}
+
+async function lbOpen(titleText) {
+  let scores;
+  try {
+    const res = await fetch("/api/scores", { cache: "no-store" });
+    if (!res.ok) return;
+    scores = (await res.json()).scores;
+  } catch (e) { return; }
+  if (state !== "win" && state !== "deadmsg") return;      // người chơi đã bấm R trong lúc chờ
+  lb.title.textContent = titleText;
+  lb.sub.textContent = `Điểm của bạn: ${score}`;
+  lb.msg.textContent = "";
+  lb.sent = false;
+  lb.mine = null;
+  lb.send.disabled = false;
+  lb.form.hidden = false;
+  try { lb.name.value = localStorage.getItem("banhmi-name") || lb.name.value; } catch (e) { /* bỏ qua */ }
+  lbRender(scores);
+  lb.el.hidden = false;
+  lb.name.focus();
+}
+
+function lbClose() { lb.el.hidden = true; }
+
+lb.form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (lb.sent) return;
+  const name = lb.name.value.trim();
+  lb.send.disabled = true;
+  lb.msg.textContent = "Đang gửi...";
+  try {
+    const res = await fetch("/api/scores", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, score }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      lb.msg.textContent = LB_ERRORS[data.error] || "Không gửi được, thử lại sau nhé.";
+      lb.send.disabled = false;
+      return;
+    }
+    lb.sent = true;
+    lb.mine = { name, score };
+    try { localStorage.setItem("banhmi-name", name); } catch (err) { /* bỏ qua */ }
+    lbRender(data.scores);
+    lb.form.hidden = true;
+    lb.msg.textContent = "Đã gửi điểm!";
+  } catch (err) {
+    lb.msg.textContent = "Mất kết nối, thử lại sau nhé.";
+    lb.send.disabled = false;
+  }
+});
+document.getElementById("lb-restart").addEventListener("click", () => { restart(); lbClose(); });
+document.getElementById("lb-close").addEventListener("click", lbClose);
+
+// Gọi mỗi khung hình: mời gửi điểm khi thắng hoặc hết mạng, đóng bảng khi chơi lại
+function lbTick() {
+  const ended = state === "win" || (state === "deadmsg" && lives <= 0);
+  if (ended && !lb.offered) {
+    lb.offered = true;
+    lbOpen(state === "win" ? "THẮNG RỒI! 🎉" : "HẾT MẠNG 💀");
+  } else if (state === "play" || state === "start") {
+    lb.offered = false;
+    if (!lb.el.hidden) lbClose();
+  }
+}
+
 // ---------- Chạy game ----------
 newGame();
 let last = performance.now(), acc = 0;
@@ -699,6 +849,7 @@ function frame(now) {
   acc += Math.min(0.05, (now - last) / 1000);
   last = now;
   while (acc >= STEP) { update(STEP); acc -= STEP; }
+  lbTick();
   render();
   requestAnimationFrame(frame);
 }
