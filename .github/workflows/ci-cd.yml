@@ -48,8 +48,9 @@ jobs:
   deploy:
     name: Deploy lên Cloudflare
     needs: test
-    # Chỉ deploy khi code đã vào nhánh main (không deploy từ pull request)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Chỉ deploy khi code đã vào nhánh main (không deploy từ pull request) VÀ đã bật công tắc AUTO_DEPLOY.
+    # Bật: gh variable set AUTO_DEPLOY --body true   |   Tắt: gh variable delete AUTO_DEPLOY
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AUTO_DEPLOY == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production

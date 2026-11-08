@@ -54,7 +54,7 @@ Lưu ý: điểm do trình duyệt tự gửi lên, nên ai biết gọi API cũ
 Workflow [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml):
 
 - **Mọi pull request và mọi lần push vào `main`**: chạy job `Test` (cài thư viện, `npm test`, `npm run test:e2e`).
-- **Push vào `main` và test đều qua**: chạy job `Deploy lên Cloudflare`:
+- **Push vào `main`, test đều qua và đã bật công tắc `AUTO_DEPLOY`**: chạy job `Deploy lên Cloudflare` (mặc định đang **tắt**, job này hiện màu xám "skipped"; xem "Thiết lập lần đầu" để bật). Khi tắt, deploy tay bằng `npm run deploy`.
   1. Kiểm tra đã có secrets và `database_id` thật.
   2. Sao lưu D1 (`backup.sql`, giữ 14 ngày trong mục Artifacts của lượt chạy).
   3. Áp dụng các file trong `migrations/` cho D1 thật.
@@ -75,7 +75,13 @@ Workflow [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml):
 3. Thêm hai secret cho repo (**Settings** → **Secrets and variables** → **Actions**, hoặc dùng `gh secret set`):
    - `CLOUDFLARE_API_TOKEN`: token vừa tạo.
    - `CLOUDFLARE_ACCOUNT_ID`: mã tài khoản Cloudflare (xem bằng `npx wrangler whoami`).
-4. Push vào `main`. Địa chỉ game hiện ở phần tóm tắt của lượt chạy (dạng `https://gamebanhmi.<tên-bạn>.workers.dev`).
+4. Bật công tắc tự deploy (tắt lại bằng `gh variable delete AUTO_DEPLOY`):
+
+   ```bash
+   gh variable set AUTO_DEPLOY --body true
+   ```
+
+5. Push vào `main`. Địa chỉ game hiện ở phần tóm tắt của lượt chạy (dạng `https://gamebanhmi.<tên-bạn>.workers.dev`).
 
 ### Đổi cấu trúc database
 
