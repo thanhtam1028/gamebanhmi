@@ -6,6 +6,10 @@
     "directory": "./public",
     "run_worker_first": ["/api/*"]
   },
+  // Giữ địa chỉ *.workers.dev luôn bật.
+  // Tên miền riêng gamebanhmi.tcaoadm.com được gắn trực tiếp trên Cloudflare (xem README), không khai báo ở đây
+  // vì token của CI không có quyền sửa tên miền.
+  "workers_dev": true,
   "d1_databases": [
     {
       "binding": "DB",

@@ -93,4 +93,17 @@ Bản code: vào tab **Actions**, mở lượt deploy cũ còn tốt rồi chạ
 
 ## Gắn tên miền riêng
 
-Hiện game chạy ở địa chỉ `workers.dev`. Muốn dùng tên miền riêng, thêm mục `routes` vào `wrangler.jsonc` (xem tài liệu Cloudflare Workers custom domains). Tên miền phải nằm trên Cloudflare DNS của bạn.
+Game chạy ở hai địa chỉ: https://gamebanhmi.tcaoadm.com (tên miền riêng) và https://gamebanhmi.tcaoadm.workers.dev.
+
+Tên miền riêng là **Custom Domain của Worker** trên Cloudflare, gắn một lần và không nằm trong `wrangler.jsonc`. Các lần deploy sau (kể cả do CI) không làm mất nó. Cách gắn lại nếu cần:
+
+1. Xóa bản ghi DNS `gamebanhmi` đang có (nếu có) ở Cloudflare → DNS, vì Cloudflare từ chối gắn khi tên đã có bản ghi khác.
+2. Tạm thêm vào `wrangler.jsonc`, kèm `"workers_dev": true` (nếu thiếu, địa chỉ `workers.dev` sẽ bị tắt):
+
+   ```jsonc
+   "routes": [{ "pattern": "gamebanhmi.tcaoadm.com", "custom_domain": true }]
+   ```
+
+3. Chạy `npx wrangler deploy` bằng tài khoản đã `wrangler login`, rồi bỏ dòng `routes` đi.
+
+Token của CI không có quyền Zone nên không tự gắn hay gỡ được tên miền. Chứng chỉ HTTPS do Cloudflare tự cấp và gia hạn.
