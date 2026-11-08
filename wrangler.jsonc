@@ -10,8 +10,7 @@
     {
       "binding": "DB",
       "database_name": "gamebanhmi-db",
-      // Thay bằng id thật sau khi chạy: npx wrangler d1 create gamebanhmi-db
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "1322e13b-d613-418c-9e14-7cc0cfe77344",
       "migrations_dir": "migrations"
     }
   ]
